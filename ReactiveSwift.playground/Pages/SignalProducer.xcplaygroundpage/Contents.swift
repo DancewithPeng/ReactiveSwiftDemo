@@ -67,6 +67,24 @@ scopedExample("Subscription") {
 	producer.start(subscriber2)
 }
 
+scopedExample("MySubscription") {
+    
+    // 创建一个Signal Producer，这是可以指定startHandler，startHandler会在添加观察者的时候执行
+    let producer = SignalProducer<Int, Never> { (inputer, _) in
+        
+        print("每次订阅都会执行的操作")
+        inputer.send(value: 1)
+        inputer.send(value: 2)
+    }
+    
+    // 创建观察者
+    let observer1 = Signal<Int, Never>.Observer(value: { print("Subscriber 1 received \($0)") })
+    let observer2 = Signal<Int, Never>.Observer(value: { print("Subscriber 2 received \($0)") })
+    
+    // start：启动一个Signal，并且把observer添加到启动的Signal中
+    producer.start(observer1)
+    producer.start(observer2)
+}
 /*:
 ### `empty`
 A producer for a Signal that will immediately complete without sending
@@ -124,6 +142,33 @@ scopedExample("`startWithSignal`") {
 	print(value)
 }
 
+scopedExample("MyStartWithSignal") {
+    
+    var myValue: Int?
+    
+    // 创建一个带有初始化值的SignalProducer
+    let producer = SignalProducer<Int, Never>(value: 42)
+    
+    // 监听producer中Signal的值的变化，并返回新的SignalProducer
+    // on方法是监听producer中的Signal的状态变化
+    let producer2 = producer.on(value: {
+        myValue = $0
+        print("producer中某个Signal值变化了 \($0)")
+    })
+    
+    // 启动一个Signal，会给到一个signal对象和disposable对象，signal可以添加观察者，disposable可以控制signal的取消
+    // 这个block结束后才开始发送值
+    producer2.startWithSignal({ (signal, disposable) in
+//        disposable.dispose()
+        print("----- \(myValue)")
+    })
+    
+    producer2.startWithSignal({ (signal2, disposable2) in
+        print("asdfasfdasd")
+    })
+    
+    print(myValue)
+}
 /*:
 ### `startWithResult`
 Creates a Signal from the producer, then adds exactly one observer to
@@ -138,6 +183,19 @@ scopedExample("`startWithResult`") {
 		.startWithResult { result in
 			print(result.value)
 		}
+}
+
+scopedExample("My StartWithResult") {
+    
+    // startWithResult启动一个Signal，然后只添加一个观察者到创建的Signal，值和错误都是通过Result返回
+    SignalProducer<Int, Never>(value: 100).startWithResult({ (result) in
+        print(result.value)
+    })
+    
+    SignalProducer<Int, Never>(value: 100).startWithResult({ (result) in
+        print("==========")
+        print(result.value)
+    })
 }
 
 /*:
@@ -159,6 +217,16 @@ scopedExample("`startWithValues`") {
 		}
 }
 
+scopedExample("My `StartWithValues`") {
+    
+    // 创建一个Signal，添加一个观察者，并且只能添加一个观察者，当值变化的时候调用指定的闭包
+    // 因为只能添加一个观察者，所以Error的类型必须是`Never`，才能使用`startWithValues`这个方法
+    SignalProducer<Int, Never>(value: 101)
+        .startWithValues { value in
+            print(value)
+    }
+}
+
 /*:
 ### `startWithCompleted`
 Creates a Signal from the producer, then adds exactly one observer to
@@ -175,6 +243,15 @@ scopedExample("`startWithCompleted`") {
 		}
 }
 
+scopedExample("My `StartWithCompleted`") {
+    
+    // 创建一个Signal，添加一个观察者，并且只能添加一个观察者，这个闭包当Signal完成时调用
+    SignalProducer<Int, Never>(value: 42)
+        .startWithCompleted {
+            print("completed called")
+    }
+}
+
 /*:
 ### `startWithFailed`
 Creates a Signal from the producer, then adds exactly one observer to
@@ -189,6 +266,15 @@ scopedExample("`startWithFailed`") {
 		.startWithFailed { error in
 			print(error)
 		}
+}
+
+scopedExample("My `StartWithFailed`") {
+    
+    // 这个和`startWithCompleted`类似
+    SignalProducer<Int, NSError>(error: NSError(domain: "example", code: 42, userInfo: nil))
+        .startWithFailed { error in
+            print(error)
+    }
 }
 
 /*:
@@ -232,6 +318,21 @@ scopedExample("`lift`") {
 		}
 }
 
+scopedExample("My `Lift`") {
+    var counter = 0
+    let transform: (Signal<Int, Never>) -> Signal<Int, Never> = { signal in
+        counter = 42
+        return signal
+    }
+    
+    // lift的操作，会创建一个新的SignalProducer对象，新的SignalProducer中的每个Signal，都已经进行了lift指定的操作了
+    SignalProducer<Int, Never>(value: 0)
+        .lift(transform)
+        .startWithValues { _ in
+            print(counter)
+    }
+}
+
 /*:
 ### `map`
 Maps each value in the producer to a new value.
@@ -242,6 +343,16 @@ scopedExample("`map`") {
 		.startWithValues { value in
 			print(value)
 		}
+}
+
+scopedExample("My `Map`") {
+    
+    // 映射每个值到新的SignalProducer中
+    SignalProducer<Int, Never>(value: 1)
+        .map { $0 + 100 }
+        .startWithValues { value in
+            print(value)
+    }
 }
 
 /*:
@@ -256,6 +367,16 @@ scopedExample("`mapError`") {
 		}
 }
 
+scopedExample("My `MapError`") {
+    
+    // 映射每个Error到新的SignalProducer中
+    SignalProducer<Int, Never>(value: 1)
+        .map { $0 + 100 }
+        .startWithValues { value in
+            print(value)
+    }
+}
+
 /*:
 ### `filter`
 Preserves only the values of the producer that pass the given predicate.
@@ -266,6 +387,16 @@ scopedExample("`filter`") {
 		.startWithValues { value in
 			print(value)
 		}
+}
+
+scopedExample("My `Filter`") {
+    
+    // 根据条件过滤值，给到新的SignalProducer中
+    SignalProducer<Int, Never>([ 1, 2, 3, 4 ])
+        .filter { $0 > 3 }
+        .startWithValues { value in
+            print(value)
+    }
 }
 
 /*:
@@ -279,6 +410,16 @@ scopedExample("`take(first:)`") {
 		.startWithValues { value in
 			print(value)
 		}
+}
+
+scopedExample("My `Take(first:)`") {
+    
+    // 只执行前几个值
+    SignalProducer<Int, Never>([ 1, 2, 3, 4 ])
+        .take(first: 3)
+        .startWithValues { value in
+            print(value)
+    }
 }
 
 /*:
@@ -296,6 +437,18 @@ scopedExample("`observe(on:)`") {
 
 	baseProducer
 		.startWithCompleted(completion)
+}
+
+scopedExample("My `observe(on:)`") {
+    
+    let baseProducer = SignalProducer<Int, Never>([ 1, 2, 3, 4 ])
+    let completion = { print("is main thread? \(Thread.current.isMainThread)") }
+
+    // 创建一个异步线程的SignalProducer
+    baseProducer.observe(on: QueueScheduler(qos: .default, name: "demo", targeting: nil)).startWithCompleted(completion)
+    
+//    baseProducer
+//        .startWithCompleted(completion)
 }
 
 /*:
@@ -316,6 +469,25 @@ scopedExample("`collect`") {
 		}
 }
 
+scopedExample("My `collect`") {
+    
+    // collect操作会把发送的值收集成一个数组，并作为新的SignalProducer的值发送
+    SignalProducer<Int, Never> { inputer, disposable in
+        inputer.send(value: 1)
+        inputer.send(value: 2)
+        inputer.send(value: 3)
+        inputer.send(value: 4)
+        inputer.sendCompleted()
+        }
+        .collect()
+        .startWithValues { value in
+            print(value)
+    }
+}
+
+
+
+
 /*:
 ### `collect(count:)`
 Returns a producer that will yield an array of values until it reaches a certain count.
@@ -332,6 +504,23 @@ scopedExample("`collect(count:)`") {
 		.startWithValues { value in
 			print(value)
 		}
+}
+
+scopedExample("My `collect(count:)`") {
+    
+    // `collect(count:)`没收集指定个数的值，就会生成一个新的SignalProducer，并把收集的值作为一个数组，赋值给SignalProducer
+    SignalProducer<Int, Never> { observer, disposable in
+        observer.send(value: 1)
+        observer.send(value: 2)
+        observer.send(value: 3)
+        observer.send(value: 4)
+        observer.send(value: 5)
+        observer.sendCompleted()
+        }
+        .collect(count: 3)
+        .startWithValues { value in
+            print(value)
+    }
 }
 
 /*:
@@ -357,6 +546,22 @@ scopedExample("`collect(_:)` matching values inclusively") {
 		}
 }
 
+scopedExample("My `collect(_:)` matching values inclusively") {
+    
+    // 没收集到到满足条件的值的集合，就会作为一个数组当去哦
+    SignalProducer<Int, Never> { observer, disposable in
+        observer.send(value: 1)
+        observer.send(value: 2)
+        observer.send(value: 3)
+        observer.send(value: 4)
+        observer.sendCompleted()
+        }
+        .collect { values in values.reduce(0, +) == 3 }
+        .startWithValues { value in
+            print(value)
+    }
+}
+
 /*:
 ### `collect(_:)` matching values exclusively
 Returns a producer that will yield an array of values based on a predicate
@@ -380,6 +585,24 @@ scopedExample("`collect(_:)` matching values exclusively") {
 		}
 }
 
+scopedExample("My `collect(_:)` matching values exclusively") {
+    
+    // 收集符合条件的值，不符合条件的值也会组成另外一个数组，这两个数组都会发送给新的SignalProducer
+    SignalProducer<Int, Never> { observer, disposable in
+        observer.send(value: 1)
+        observer.send(value: 2)
+        observer.send(value: 3)
+        observer.send(value: 4)
+        observer.send(value: 5)
+        observer.sendCompleted()
+        }
+        .collect { values, next in next == 3 }
+        .startWithValues { value in
+            print(value)
+    }
+}
+
+
 /*:
 ### `combineLatest(with:)`
 Combines the latest value of the receiver with the latest value from
@@ -400,6 +623,18 @@ scopedExample("`combineLatest(with:)`") {
 		}
 }
 
+scopedExample("My `combineLatest(with:)`") {
+    let producer1 = SignalProducer<Int, Never>([ 1, 2, 3, 4 ])
+    let producer2 = SignalProducer<Int, Never>([ 1, 2, 3])
+    
+    // 第一个SignalProducer的最新值和第二个SignalProducer中的每个值，组成一个对应的元组数组，然后把这个元组数组赋值给新的SignalProducer
+    producer1
+        .combineLatest(with: producer2)
+        .startWithValues { value in
+            print("\(value)")
+    }
+}
+
 /*:
 ### `skip(first:)`
 Returns a producer that will skip the first `count` values, then forward
@@ -412,6 +647,18 @@ scopedExample("`skip(first:)`") {
 			print(value)
 		}
 }
+
+scopedExample("My `skip(first:)`") {
+    
+    // `skip(first:)`跳过指定前几个值，然后把剩下的值赋给新的SignalProducer
+    SignalProducer<Int, Never>([ 1, 2, 3, 4 ])
+        .skip(first: 3)
+        .startWithValues { value in
+            print(value)
+    }
+}
+
+
 
 /*:
 ### `materialize`
@@ -433,6 +680,15 @@ scopedExample("`materialize`") {
 		}
 }
 
+scopedExample("My `materialize`") {
+    
+    // 会把值转化为普通事件，发送给新的SignalProducer
+    SignalProducer<Int, Never>([ 1, 2, 3, 4 ])
+        .materialize()
+        .startWithValues { value in
+            print(value)
+    }
+}
 /*:
  ### `materializeResults`
 
@@ -445,6 +701,16 @@ scopedExample("`materialize`") {
  send the `Result.failure` itself and then complete.
  */
 scopedExample("`materializeResults`") {
+    SignalProducer<Int, Never>([ 1, 2, 3, 4 ])
+        .materializeResults()
+        .startWithValues { value in
+            print(value)
+    }
+}
+
+scopedExample("My `materializeResults`") {
+    
+    // 会把值转化为Result，发送给新的SignalProducer
     SignalProducer<Int, Never>([ 1, 2, 3, 4 ])
         .materializeResults()
         .startWithValues { value in
@@ -476,6 +742,21 @@ scopedExample("`sample(on:)`") {
 		}
 }
 
+scopedExample("My `sample(on:)`") {
+    
+    let baseProducer = SignalProducer<Int, Never>([ 1, 2, 3, 4 ])
+    
+    // 采样，返回SignalProducer必须为SignalProducer<(), Never>，这里只会采样baseProducer的最新值
+    let sampledOnProducer = SignalProducer<Int, Never>([ 1, 2, 3 ])
+        .map { _ in () }
+    
+    baseProducer
+        .sample(on: sampledOnProducer)
+        .startWithValues { value in
+            print(value)
+    }
+}
+
 /*:
 ### `combinePrevious`
 Forwards events from `self` with history: values of the returned producer
@@ -489,6 +770,16 @@ scopedExample("`combinePrevious`") {
 		.startWithValues { value in
 			print("\(value)")
 		}
+}
+
+scopedExample("My `combinePrevious`") {
+    
+    // 组合相邻两个元素，组成一个元组数组，赋值给新的SignalProducer
+    SignalProducer<Int, Never>([ 1, 2, 3, 4 ])
+        .combinePrevious(0) // 组合的时候，这里指定初始值，会放数组的第一个位置
+        .startWithValues({ (value) in
+            print(value)
+        })
 }
 
 /*:
@@ -507,6 +798,15 @@ scopedExample("`scan`") {
 		}
 }
 
+scopedExample("My `scan`") {
+    
+    // 扫描原本的SignalProducer中的值，每扫描一个，会指定指定的操作，操作的结果需要返回一个值，这个值作为下一次扫描传入的新值
+    SignalProducer<Int, Never>([ 1, 2, 3, 4 ])
+        .scan(0, +)
+        .startWithValues { value in
+            print(value)
+    }
+}
 /*:
 ### `reduce`
 Like `scan`, but sends only the final value and then immediately completes.
@@ -517,6 +817,16 @@ scopedExample("`reduce`") {
 		.startWithValues { value in
 			print(value)
 		}
+}
+
+scopedExample("My `reduce`") {
+    
+    // 和扫描类似，但是只发送最后值，并且对应的Signal马上终止
+    SignalProducer<Int, Never>([ 1, 2, 3, 4 ])
+        .reduce(0, +)
+        .startWithValues { value in
+            print(value)
+    }
 }
 
 /*:
@@ -532,6 +842,16 @@ scopedExample("`skipRepeats`") {
 		}
 }
 
+scopedExample("My `skipRepeats`") {
+    
+    // 过滤掉重复值，这个只能比对前后两个元素
+    SignalProducer<Int, Never>([ 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 3, 1, 1, 1, 2, 2, 2, 4 ,3, 2, 1])
+        .skipRepeats(==)
+        .startWithValues { value in
+            print(value)
+    }
+}
+
 /*:
 ### `skip(while:)`
 Does not forward any values from `self` until `predicate` returns false,
@@ -544,6 +864,16 @@ scopedExample("`skip(while:)`") {
 		.startWithValues { value in
 			print(value)
 		}
+}
+
+scopedExample("My `skip(while:)`") {
+    
+    // 过滤掉符合条件的值，直到不符合条件的值出现，往后就不会进行过滤
+    SignalProducer<Int, Never>([ 3, 3, 3, 3, 1, 2, 3, 4 ])
+        .skip { $0 > 2 }
+        .startWithValues { value in
+            print(value)
+    }
 }
 
 /*:
@@ -578,6 +908,33 @@ scopedExample("`take(untilReplacement:)`") {
 		}
 }
 
+scopedExample("My `take(untilReplacement:)`") {
+    
+    // 替换的Signal
+    let (replacementSignal, incomingReplacementObserver) = Signal<Int, Never>.pipe()
+    
+    // 基础的Signal
+    let baseProducer = SignalProducer<Int, Never> { incomingObserver, _ in
+        incomingObserver.send(value: 1)
+        incomingObserver.send(value: 2)
+        incomingObserver.send(value: 3)
+        
+        incomingReplacementObserver.send(value: 42)
+        
+        incomingObserver.send(value: 4)
+        
+        incomingReplacementObserver.send(value: 42)
+    }
+    
+    // 正常发送事件，直到替换的Signal发送事件，之后就由替换的Signal来发送事件，原本的就不响应了
+    baseProducer
+        .take(untilReplacement: replacementSignal)
+        .startWithValues { value in
+            print(value)
+    }
+}
+
+
 /*:
 ### `take(last:)`
 Waits until `self` completes and then forwards the final `count` values
@@ -589,6 +946,16 @@ scopedExample("`take(last:)`") {
 		.startWithValues { value in
 			print(value)
 		}
+}
+
+scopedExample("My `take(last:)`") {
+    
+    // 接收到完成事件之前都不发送事件，接收到完成事件的时候，发送指定的最后几个值
+    SignalProducer<Int, Never>([ 1, 2, 3, 4 ])
+        .take(last: 2)
+        .startWithValues { value in
+            print(value)
+    }
 }
 
 /*:
@@ -603,6 +970,16 @@ scopedExample("`skipNil`") {
 			print(value)
 		}
 }
+
+scopedExample("My `skipNil`") {
+    // 跳过空值
+    SignalProducer<Int?, Never>([ nil, 1, 2, nil, 3, 4, nil ])
+        .skipNil()
+        .startWithValues { value in
+            print(value)
+    }
+}
+
 
 
 /*:
@@ -621,6 +998,19 @@ scopedExample("`zip(with:)`") {
 		}
 }
 
+scopedExample("My `zip(with:)`") {
+    
+    // 组合两个SignalProducer的值，让每对值组成一对元组，赋值给新的SignalProducer
+    let baseProducer = SignalProducer<Int, Never>([ 1, 2, 3, 4 ])
+    let zippedProducer = SignalProducer<Int, Never>([ 42, 43 ])
+    
+    baseProducer
+        .zip(with: zippedProducer)
+        .startWithValues { value in
+            print("\(value)")
+    }
+}
+
 /*:
 ### `repeat`
 Repeats `self` a total of `count` times. Repeating `1` times results in
@@ -637,6 +1027,21 @@ scopedExample("`repeat`") {
 		.start()
 
 	print(counter)
+}
+
+
+scopedExample("My `repeat`") {
+    var counter = 0
+
+    // 重复指定次数
+    SignalProducer<(), Never> { observer, disposable in
+        counter += 1
+        observer.sendCompleted()
+        }
+        .repeat(21)
+        .start()
+    
+    print(counter)
 }
 
 /*:
@@ -661,6 +1066,25 @@ scopedExample("`retry(upTo:)`") {
 		}
 }
 
+scopedExample("My `retry(upTo:)`") {
+    var tries = 0
+    
+    // 重试指定次数
+    SignalProducer<Int, NSError> { observer, disposable in
+        if tries == 0 {
+            tries += 1
+            observer.send(error: NSError(domain: "retry", code: 0, userInfo: nil))
+        } else {
+            observer.send(value: 42)
+            observer.sendCompleted()
+        }
+        }
+        .retry(upTo: 2)
+        .startWithResult { result in
+            print(result)
+    }
+}
+
 /*:
 ### `then`
 Waits for completion of `producer`, *then* forwards all events from
@@ -677,6 +1101,24 @@ scopedExample("`then`") {
 		.startWithValues { value in
 			print(value)
 		}
+}
+
+scopedExample("My `then`") {
+    
+    // SignalProducer
+    let baseProducer = SignalProducer<Int, Never>([ 1, 2, 3, 4 ])
+    let thenProducer = SignalProducer<Int, Never>(value: 42)
+    
+    baseProducer.startWithValues({ (value) in
+        print(value)
+    })
+    
+    // 会等待第一个SignalProducer完成后，才会执行第二个SignalProducer
+    baseProducer
+        .then(thenProducer)
+        .startWithValues { value in
+            print(value)
+    }
 }
 
 /*:
@@ -720,6 +1162,25 @@ scopedExample("`replayLazily(upTo:)`") {
 	}
 }
 
+scopedExample("My `replayLazily(upTo:)`") {
+    
+    // `replayLazily`只有第一个观察者可以观察到所有值的变化，其他的观察者只能观察到倒数的指定数值的事件
+    let baseProducer = SignalProducer<Int, Never>([ 1, 2, 3, 4, 42 ])
+        .replayLazily(upTo: 3)
+    
+    baseProducer.startWithValues { value in
+        print("1111 \(value)")
+    }
+    
+    baseProducer.startWithValues { value in
+        print("2222 \(value)")
+    }
+    
+    baseProducer.startWithValues { value in
+        print("3333 \(value)")
+    }
+}
+
 /*:
 ### `flatMap(.latest)`
 Maps each event from `self` to a new producer, then flattens the
@@ -735,6 +1196,18 @@ scopedExample("`flatMap(.latest)`") {
 		.startWithValues { value in
 			print(value)
 		}
+}
+
+scopedExample("My `flatMap(.latest)`") {
+    
+    // 根据策略，映射值到新的SignalProducer，并使新的SignalProducer扁平化
+    SignalProducer<Int, Never>([1, 2, 3, 4])
+        .flatMap(.latest, { (val) -> SignalProducer<Int, Never> in
+            return SignalProducer<Int, Never>(value: val+3)
+        })
+        .startWithValues { value in
+            print(value)
+        }
 }
 
 /*:
